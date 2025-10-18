@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Syntax</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+
+<style>
+    html { scroll-behavior: smooth; }
+    body { font-family: 'Inter', sans-serif; background-color: #0d0d0d; }
+    #chat-window { height: calc(100vh - 120px); overflow-y: scroll; scroll-behavior: smooth; }
+    #particle-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: -1; }
+    #chat-window pre { background-color: #1f2937; padding: 0.75rem; border-radius: 0.5rem; overflow-x: auto; border: 1px solid #374151; }
+    #chat-window code { font-family: 'Fira Code', 'Roboto Mono', monospace; font-size: 0.875rem; color: #d1d5db; }
+    #chat-window::-webkit-scrollbar { width: 5px; }
+    #chat-window::-webkit-scrollbar-track { background: #1f2937; }
+    #chat-window::-webkit-scrollbar-thumb { background: #22d3ee; border-radius: 4px; box-shadow: 0 0 4px rgba(34, 211, 238, 0.7); }
+    #chat-window::-webkit-scrollbar-thumb:hover { background: #67e8f9; box-shadow: 0 0 6px rgba(103, 232, 249, 1); }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script type="module" src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script>
+    // --- START: PURE FRONTEND JAVASCRIPT ---
+    const scrollToBottom = () => {
+        const chatWindow = document.getElementById('chat-window');
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    };
+
+    // Starfield animation
+    let canvas, ctx, particles = [];
+    // make particle count adaptive for mobile
+    const numParticles = window.matchMedia('(max-width: 640px)').matches ? 80 : 400;
+    const BASE_SPEED_SCALE = 0.00006;
+    class Particle {
+        constructor(){ this.reset(true); }
+        reset(isInitial = false){
+            this.size = 0.5 + Math.random()*1.5;
+            this.alpha = 0.3 + Math.random()*0.7;
+            const baseSpeed = Math.min(canvas.width, canvas.height) * BASE_SPEED_SCALE;
+            this.speedY = baseSpeed*2*(0.8 + Math.random()*0.4);
+            this.speedX = -baseSpeed*1*(0.8 + Math.random()*0.4);
+            if(isInitial){ this.x = Math.random()*canvas.width; this.y = Math.random()*canvas.height; }
+            else{ this.x = Math.random()*canvas.width*1.2; this.y = -this.size; }
+        }
+        update(){ this.x+=this.speedX; this.y+=this.speedY; if(this.x<-this.size || this.y>canvas.height+this.size){ this.reset(); } }
+        draw(){ ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2,false); ctx.fillStyle=`rgba(255,255,255,${this.alpha})`; ctx.fill(); }
+    }
+    function initParticles(){ particles=[]; for(let i=0;i<numParticles;i++){ particles.push(new Particle()); } }
+    function resizeCanvas(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; initParticles(); }
+    function animateCanvas(){ ctx.fillStyle='rgba(13,13,13,0.6)'; ctx.fillRect(0,0,canvas.width,canvas.height); particles.forEach(p=>{p.update();p.draw();}); requestAnimationFrame(animateCanvas); }
+    const initCanvas=()=>{ canvas=document.getElementById('particle-canvas'); ctx=canvas.getContext('2d'); resizeCanvas(); window.addEventListener('resize', resizeCanvas, {passive:true}); animateCanvas(); };
+
+    // Append message
+    const appendMessage=(text,role,shouldScroll=true)=>{
+        const chatWindow=document.getElementById('chat-window');
+        const messageDiv=document.createElement('div');
+        const isUser = role==='user';
+        messageDiv.className=`chat-message mb-4 flex ${isUser?'justify-end':'justify-start'}`;
+        // use responsive width classes (no invalid max-w-3/4)
+        const bubbleClasses = isUser?'bg-indigo-600 text-white rounded-tr-none':'bg-gray-700 text-gray-200 rounded-tl-none';
+        messageDiv.innerHTML=`<div class="w-full sm:w-3/4 md:w-2/3 lg:max-w-xl p-3 shadow-lg rounded-xl ${bubbleClasses}">
+            <div class="prose prose-sm prose-invert" style="max-width:none;">
+                <p class="font-semibold text-sm mb-1 ${isUser?'text-indigo-200':'text-gray-400'}">${isUser?'You':'Syntax'}</p>
+                <div id="message-content-${Date.now()}" class="message-content"></div>
+            </div>
+        </div>`;
+        chatWindow.appendChild(messageDiv);
+        const contentDiv = messageDiv.querySelector('.message-content');
+        // marked is now loaded before this script
+        contentDiv.innerHTML = marked.parse(text);
+        if(shouldScroll) scrollToBottom();
+        return messageDiv;
+    };
+
+    // --- SEND MESSAGE WITH LOCAL API CALL ---
+    const sendMessage = async () => {
+        const inputField = document.getElementById('user-input');
+        const userQuery = inputField.value.trim();
+        if(!userQuery) return;
+
+        inputField.value='';
+        inputField.disabled = true;
+        document.getElementById('send-button').disabled = true;
+
+        appendMessage(userQuery,'user',true);
+
+        const loadingIndicator = appendMessage(
+            `<div class="flex items-center space-x-2">
+                <div class="w-2 h-2 bg-indigo-400 rounded-full animate-pulse"></div>
+                <div class="w-2 h-2 bg-indigo-400 rounded-full animate-pulse" style="animation-delay:0.2s;"></div>
+                <div class="w-2 h-2 bg-indigo-400 rounded-full animate-pulse" style="animation-delay:0.4s;"></div>
+            </div>`,
+            'model',
+            true
+        );
+        loadingIndicator.id = 'loading-indicator';
+
+        try {
+            // use relative path so it works on local and deployed environments
+            const response = await fetch('/api/syntax', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: userQuery })
+            });
+            const data = await response.json();
+            loadingIndicator.remove();
+            appendMessage(data.reply || "No reply from API",'model',true);
+        } catch(err) {
+            loadingIndicator.remove();
+            appendMessage("⚠️ Failed to fetch response. Try again.",'model',true);
+            console.error(err);
+        }
+
+        inputField.disabled = false;
+        document.getElementById('send-button').disabled = false;
+        inputField.focus();
+        scrollToBottom();
+    };
+
+    window.onload = () => {
+        initCanvas();
+        document.getElementById('user-input').addEventListener('keydown', function(event){
+            if(event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        });
+        document.getElementById('send-button').addEventListener('click', sendMessage);
+        const initialMessage = document.getElementById('initial-welcome-message');
+        if(initialMessage) initialMessage.style.display='flex';
+    };
+  </script>
+</head>
+
+<body class="bg-[#0d0d0d] text-gray-100 min-h-screen">
+    <canvas id="particle-canvas"></canvas>
+    <div class="max-w-5xl mx-auto p-4 flex flex-col h-screen relative z-10">
+        <header class="py-4 border-b border-gray-700 flex items-center justify-between">
+            <h1 class="text-2xl sm:text-3xl font-bold text-indigo-400 flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6 mr-3">
+                    <path d="M19 6V5c0-1.7-1.3-3-3-3H8C6.3 2 5 3.3 5 5v1M3 17a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2z"></path>
+                    <line x1="12" y1="12" x2="12" y2="19"></line>
+                </svg>
+                Syntax
+            </h1>
+        </header>
+
+        <div id="chat-window" class="flex-grow my-4 p-4 bg-gray-900 shadow-xl rounded-lg border border-gray-800">
+            <div id="initial-welcome-message" class="chat-message mb-4 flex justify-start">
+                <div class="max-w-xl p-3 shadow-lg rounded-xl bg-gray-700 text-gray-200 rounded-tl-none transition duration-300">
+                    <p class="font-semibold text-sm mb-1 text-gray-400">Syntax</p>
+                    <div class="message-content">
+                        <p class="text-lg text-indigo-400">
+                            Hello! I am Syntax. Ask me about algorithms, syntax, complexity, or any coding problem you're stuck on. Let's learn!
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="pb-4 pt-2">
+            <div class="flex space-x-3">
+                <input type="text" id="user-input" class="flex-grow p-4 rounded-xl border border-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-800 text-gray-100 placeholder-gray-500 transition duration-200 shadow-xl" placeholder="Ask about Binary Search, Djikstras Algorithm, or Big O notation..." autocomplete="off"/>
+                <button id="send-button" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 px-4 rounded-xl shadow-xl transition duration-150 ease-in-out transform active:scale-95 disabled:bg-gray-600 disabled:opacity-50 flex items-center justify-center" aria-label="Send Message">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-send">
+                        <path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <footer id="contact" class="mt-6 border-t border-gray-800 pt-6 text-center text-gray-300">
+            <p class="text-lg text-indigo-400 font-semibold mb-2">Get in contact</p>
+            <p>Email: <a href="mailto:sb7195839@gmail.com" class="text-indigo-300 hover:underline">sb7195839@gmail.com</a></p>
+            <p class="text-sm text-gray-500 mt-2">Give your suggestions.</p>
+        </footer>
+    </div>
+</body>
+</html>
