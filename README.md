@@ -6,7 +6,7 @@
 [![Difficulty](https://img.shields.io/badge/Levels-Beginner%20%7C%20Intermediate%20%7C%20Advanced-green)]()
 
 An intelligent, instructor-style chatbot that teaches **Data Structures & Algorithms** the way a great mentor would — with hints before answers, visual diagrams, adaptive difficulty, and hands-on practice.
-
+DEMO--https://tinyurl.com/yt5vd6cj
 > _"Don't just give the answer. Teach the thinking."_
 
 ---
