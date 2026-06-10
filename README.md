@@ -1,7 +1,7 @@
 # 🧠 Syntax — AI-Powered Data Structures & Algorithms Chatbot
 
 [![Python](https://img.shields.io/badge/Python-3.x-blue?logo=python)](https://python.org)
-[![Claude](https://img.shields.io/badge/Powered%20by-Claude%20AI-orange)](https://anthropic.com)
+[![Gemini](https://img.shields.io/badge/Powered%20by-gemini%20AI-orange)](https://gemini.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
 [![Difficulty](https://img.shields.io/badge/Levels-Beginner%20%7C%20Intermediate%20%7C%20Advanced-green)]()
 
